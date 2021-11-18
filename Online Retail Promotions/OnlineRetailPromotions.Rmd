@@ -1,0 +1,273 @@
+---
+title: "Online Retail Promotions"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(glue)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r, echo=FALSE}
+df <- read_xlsx("C:/College/Courses/SDM/Assignments/Online Retail Promotions/OnlineretailPromotions.xlsx", sheet = "Data")
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+df_c <- df %>% 
+  filter(conversion == 1)
+```
+
+```{r}
+hist(df_c$spend)
+```
+```{r}
+df_c$spend <- round(df_c$spend)
+```
+
+```{r}
+df_c %>% 
+  filter(spend == 30)
+```
+
+```{r}
+names <-c('mens','womens','zipcode','newcustomer','channel','campaign')
+df_c[,names] <- lapply(df_c[,names],factor)
+```
+
+
+```{r}
+df_c$campaign <- relevel(df_c$campaign, "No E-Mail")
+```
+
+```{r}
+df <- df %>% 
+  mutate(merch = ifelse(mens == 1 & womens ==0,"mens",
+         ifelse(mens ==0 & womens ==1,"womens","both"))) 
+  
+```
+
+```{r}
+df_c$merch <- as.factor(df_c$merch$merch)
+
+```
+
+```{r}
+df_c$quarter <-  df_c %>% 
+  transmute(quarter = ifelse(recency >9 & recency <=12,4,
+                       ifelse(recency >6 & recency <=9,3,
+         ifelse(recency > 3 & recency <= 6,2,
+                ifelse(recency>0 & recency <=3,1,NA))))) 
+  
+```
+```{r}
+df_c$quarter <- df_c$quarter$quarter
+```
+```{r}
+detach("package:MASS",unload = TRUE)
+```
+
+```{r}
+df_c %>% 
+  select(recency,quarter)
+```
+
+
+```{r}
+str(df_c)
+```
+
+
+```{r}
+df_c%>% 
+  group_by(merch)
+```
+
+```{r}
+hist(log(df_c$spend))
+```
+
+```{r}
+summary(df_c$spend)
+```
+```{r}
+nums <- unlist(lapply(df_c, is.numeric))
+PerformanceAnalytics::chart.Correlation(df_c[,nums])
+```
+
+
+how did campaign affect converts customers?
+
+```{r}
+df_c %>% 
+  add_count(campaign,name={"total"}) %>% 
+  mutate(campaign = glue("{campaign}({total})"),       
+         fct_reorder(campaign,spend)) %>% 
+  ggplot(aes(x = campaign,y=spend)) +
+    geom_boxplot() 
+```
+
+Do recent visitors tend to spend more?
+```{r}
+
+df_c %>% 
+  ggplot() +
+  aes(x = recency, y = spend) +
+  geom_point() + geom_smooth() 
+```
+Do people who spent a lot in the past year spend more?
+```{r}
+df_c %>% filter(spend > 0) %>% 
+  ggplot() +
+  aes(x = history, y = spend) +
+  geom_point() + geom_smooth() 
+```
+How do people in urban, suburban and rural area spend?
+```{r}
+df_c  %>% 
+  add_count(zipcode,name={"total"}) %>% 
+  mutate(zipcode = glue("{zipcode}({total})"),       
+         fct_reorder(zipcode,spend)) %>% 
+  ggplot(aes(x = zipcode,y=spend)) +
+    geom_boxplot() 
+```
+Do new customers spend more?
+```{r}
+df_c %>%
+  add_count(newcustomer,name={"total"}) %>% 
+  mutate(newcustomer = glue("{newcustomer}({total})"),       
+         fct_reorder(newcustomer,spend)) %>% 
+  ggplot(aes(x = newcustomer,y=spend)) +
+    geom_boxplot() 
+```
+
+channel which purchased from last year against dollars spent after email campaign
+```{r}
+df_c %>%
+  add_count(channel,name={"total"}) %>% 
+  mutate(channel = glue("{channel}({total})"),       
+         fct_reorder(channel,spend)) %>% 
+  ggplot(aes(x = channel,y=spend)) +
+    geom_boxplot() 
+```
+```{r}
+df_c %>%
+  add_count(channel,name={"total"}) %>% 
+  mutate(channel = glue("{channel}({total})"),       
+         fct_reorder(channel,spend)) %>% 
+  ggplot(aes(x = channel,y=spend)) +
+    geom_boxplot() 
+```
+```{r}
+df_c %>%
+  add_count(merch,name={"total"}) %>% 
+  mutate(channel = glue("{merch}({total})"),       
+         fct_reorder(merch,spend)) %>% 
+  ggplot(aes(x = merch,y=spend)) +
+    geom_boxplot() 
+```
+```{r}
+df_c %>% 
+  ggplot(aes(x = log(history), y =log(spend) , color = merch)) +
+
+  geom_point() + geom_smooth(method = "lm", se = FALSE) 
+```
+```{r}
+df_c %>% 
+  ggplot(aes(x = log(history), y =log(spend) , color = zipcode)) +
+
+  geom_point() + geom_smooth(method = "lm", se = FALSE) 
+```
+```{r}
+df_c %>% 
+  ggplot(aes(x = log(history), y =log(spend) , color = newcustomer)) +
+
+  geom_point() + geom_smooth(method = "lm", se = FALSE) 
+```
+```{r}
+df_c %>% 
+  ggplot(aes(x = log(history), y =log(spend) , color = channel)) +
+
+  geom_point() + geom_smooth(method = "lm", se = FALSE) 
+```
+```{r}
+df_c %>% 
+  ggplot(aes(x = log(history), y =log(spend) , color = campaign)) +
+
+  geom_point() + geom_smooth(method = "lm", se = FALSE) 
+```
+
+```{r}
+summary(df_c$spend)
+```
+
+```{r}
+poisson1 <- glm(spend ~ 1, family=poisson (link=log), data=df_c)   # Intercept only model
+
+
+poisson2 <- glm(spend ~ history + merch + zipcode + newcustomer + channel + campaign, family=poisson (link=log), data=df_c)
+
+
+poisson3 <- glm(spend ~ log(history) + merch + zipcode + newcustomer + channel + campaign + history*merch + history*zipcode + history*channel + history*campaign, family = poisson(link = log), data=df_c)
+
+
+stargazer::stargazer(poisson1, poisson2, poisson3, type="text", title="Model Comparison of poisson models for amount spent")
+```
+```{r}
+#library(AER)
+dispersiontest(poisson3)
+```
+```{r}
+
+poisson3 <- glm(spend ~ log(history) + merch + zipcode + newcustomer + channel + campaign + history*merch + history*zipcode + history*channel + history*campaign, family = poisson(link = log), data=df_c)
+summary(poisson3)
+```
+
+```{r}
+quassipoisson <- glm(spend ~ history + recency + merch + zipcode + newcustomer + channel + campaign + history*merch + history*channel + merch*campaign, family = quasipoisson(link = log), data=df_c)
+summary(quassipoisson)
+```
+
+```{r}
+stargazer::stargazer(poisson3,quassipoisson, type="text", title="Model Comparison of poisson and quassipoisson models for amount spent")
+```
+```{r}
+#library(MASS)
+nbinom1 <- glm.nb(spend ~ history + recency + merch + zipcode + newcustomer + channel + campaign, data=df_c)
+nbinom2 <- glm.nb(spend ~ history + recency + merch + zipcode + newcustomer + channel + campaign + history*merch + history*channel + merch*campaign, data=df_c)
+nbinom3 <- glm.nb(spend ~ log(history) + recency + mens+ womens + zipcode + newcustomer + channel + campaign + history*merch + history*channel + merch*campaign + history*merch*campaign + history*merch*channel, data=df_c)
+```
+
+```{r}
+plot(nbinom2)
+```
+```{r}
+car::vif(nbinom1)
+lmtest::dwtest(nbinom2)
+```
+
+```{r}
+stargazer::stargazer(nbinom1,nbinom2,quassipoisson, type="text", title="Model Comparison of negative binomial models for amount spent")
+```
+
+```{r}
+knitr::purl("OnlineRetailPromotions.Rmd")
+```
+

@@ -1,0 +1,313 @@
+---
+title: "Hunters Green House Price prediction"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r houseprices,echo=FALSE}
+
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(glue)
+```
+
+```{r,echo=FALSE}
+#options(scipen=0)
+```
+
+## Importing the data
+
+```{r reading, echo=FALSE}
+df <- read_xlsx("C:/College/Courses/SDM/Assignments/HuntersGreenHomeSales.xlsx", sheet = "Data")
+```
+
+## Data cleaning & Transformations
+
+Made changes to 4 garages column values by getting values from Zillow
+
+Making a copy of the original dataset
+```{r}
+df_new <- df
+```
+
+Renamed adom and cdom columns
+```{r}
+df_new <- rename(df_new, adom = adom_agentdaysonmarket)
+df_new <- rename(df_new, cdom = cdom_cumuldaysmls)
+```
+
+Some of houses have been relisted and sold again between 2015 and 2020.
+
+```{r}
+df_new %>% 
+  count(Address) %>% 
+  filter(., n>1)
+
+```
+
+Taking only one record of those houses by filtering for latest selling date.
+```{r}
+df_new <- df_new %>% 
+  mutate(Date = as.Date(x = datesold, format = "%y/%m/%d")) %>% 
+  group_by(Address) %>% 
+  arrange(desc(Date)) %>%
+  slice(1) 
+  
+```
+
+Checking for null values
+
+```{r}
+colSums((is.na(df_new)))
+```
+
+Replacing null values in Spa field with FALSE
+
+```{r}
+df_new <- df_new %>%
+mutate(spa = replace_na(spa,FALSE))
+```
+
+### Data transformation
+
+Halving the values of half baths and adding it to bathsfull
+
+```{r}
+df_new$bath <- (df_new$bathsfull + (df_new$bathshalf/2))
+```
+
+Finding how old a house was at the time the house was by finding the difference between year built and pending date.
+
+```{r}
+df_new$yrsold <- as.numeric(format(df_new$PendingDate, format = "%Y")) - df_new$yrblt
+```
+
+Changing values in roof field
+
+```{r}
+df_new <- df_new %>% 
+  mutate(Roof = case_when(
+    Roof == "Slate, Tile" ~ "Tile",
+    Roof == "Shingle, Tile" ~ "Tile",
+    Roof == "Shake, Shingle" ~ "Shingle",
+    Roof == "Slate" ~ "Tile",
+    Roof == "Built-Up" ~ "Shingle",
+    Roof == "Other" ~ "Tile",
+    Roof == "Concrete, Tile" ~ "Tile",
+    Roof == "Tile" ~ "Tile",
+    Roof == "Shingle" ~ "Shingle"
+  ))
+ 
+```
+
+Count & percentage of categories in Roof
+
+```{r}
+janitor::tabyl(df_new, Roof)
+janitor::tabyl(df_new, spa)
+janitor::tabyl(df_new, Pool)
+janitor::tabyl(df_new, splsale)
+```
+
+factorizing all categorical variables
+
+```{r}
+df_new$Roof <- factor(df_new$Roof)
+df_new$Pool <- factor(df_new$Pool)
+df_new$spa <- factor(df_new$spa)
+df_new$splsale <- factor(df_new$splsale)
+```
+
+transferring cleaned and transformed dataframe to original one
+
+```{r}
+df <- df_new
+remove(df_new)
+```
+
+removing columns which are not useful for predicting house prices
+
+```{r}
+df <- subset(x = df,select = -c(bathsfull,bathshalf,bathstotal,Address,Status,slnoskm,Date,datesold,sppersqft,subdivn))
+```
+
+
+### EDA
+
+Histogram of dependent variables price sold and adom
+
+```{r,echo=FALSE}
+#require(gridExtra)
+plot1 <- ggplot(data = df,aes(x=pricesold)) + geom_histogram()
+
+plot2 <- ggplot(data = df,aes(x=log(pricesold))) + geom_histogram(bins=30)
+
+gridExtra::grid.arrange(plot1, plot2, ncol=2)
+
+
+```
+The histogram is clearly skewed to the right. However doing a log on price sold makes it look normally distributed. We may have to use a exponential model for the price sold. 
+
+
+Using the library performance analytics on numeric columns. This is to check for the relationship between all numeric variables.
+
+```{r,echo=FALSE}
+nums <- unlist(lapply(df, is.numeric))
+PerformanceAnalytics::chart.Correlation(df[,nums])
+```
+
+We will not use variables in our model where correlation is greater than 0.7
+
+
+```{r}
+summary(df)
+```
+
+Does having a swimming pool affect price sold?
+
+```{r,echo=FALSE}
+df %>% 
+  add_count(Pool,name={"Pool_total"}) %>% 
+  mutate(Pool = glue("{Pool}({Pool_total})"),       fct_reorder(Pool,pricesold)) %>% 
+  ggplot(aes(x = Pool,y=pricesold)) +
+    geom_boxplot() 
+           
+```
+
+Does type of Roof matter?
+
+```{r,echo=FALSE}
+ggplot(data = df, mapping = aes(x = Roof,y=pricesold)) +
+    geom_boxplot()
+
+```
+
+
+```{r,echo=FALSE}
+df %>% 
+  ggplot(aes(pricesold,fill = Roof)) +
+    geom_density(alpha = 0.5) 
+```
+
+Do old houses go for cheap price?
+
+```{r,echo=FALSE}
+df %>% 
+  add_count(yrblt,name={"Year_total"}) %>% 
+  mutate(yrblt = glue("{yrblt}({Year_total})"),       fct_reorder(yrblt,pricesold)) %>% 
+  ggplot(aes(x = yrblt,y=pricesold)) +
+    geom_jitter() + geom_boxplot(alpha=0.5)
+
+#add alpha for transparency
+```
+```{r,echo=FALSE}
+options(scipen = 999)
+```
+
+Spa's increase the value of a house?
+
+```{r,echo=FALSE}
+df %>% 
+  ggplot(data = df, mapping = aes(x = spa,y=pricesold)) +
+    geom_boxplot()
+```
+
+Does foreclosures affect selling price?
+
+```{r,echo=FALSE}
+df %>% 
+  ggplot(data = df, mapping = aes(x = splsale,y=pricesold)) +
+    geom_boxplot()
+  
+```
+
+Having more beds increases house value?
+
+```{r,echo=FALSE}
+df %>% 
+  ggplot(data = df, mapping = aes(x = Beds,y=pricesold)) +
+    geom_point() + geom_smooth(method= "lm")
+```
+
+
+### Models
+
+Exponential models predicting house value
+
+```{r}
+m1_sp <- lm(log(pricesold) ~ Beds + bath + garages + yrsold +  adom + Pool + spa + lotsqft + sqft + Roof, data = df)
+summary(m1_sp)
+plot(m1_sp)
+```
+
+Testing for OLS assumptions
+```{r}
+hist(m1_sp$residuals)
+hist(m1_sp$fitted.values)
+
+print("Normality - Shapiro Wilks test : ") # since sample less than 2000
+shapiro.test(m1_sp$residuals) 
+print("Bartlett's test : ") 
+bartlett.test(list(m1_sp$residuals,m1_sp$fitted.values))
+print("Durbin-Watson's test : ") 
+lmtest::dwtest(m1_sp)
+```
+
+```{r}
+#install.packages("car")
+car::vif(m1_sp)
+```
+
+```{r}
+m2_sp <- lm(log(pricesold) ~ Beds + bath + garages + yrsold + adom + Pool + spa + lppersqft + Roof, data = df)
+summary(m2_sp)
+plot(m2_sp)
+
+hist(m2_sp$residuals)
+hist(m2_sp$fitted.values)
+
+print("Normality - Shapiro Wilks test : ") # since sample less than 2000
+shapiro.test(m2_sp$residuals) 
+print("Bartlett's test : ") 
+bartlett.test(list(m2_sp$residuals,m2_sp$fitted.values))
+print("Durbin-Watson's test : ") 
+lmtest::dwtest(m2_sp)
+car::vif(m2_sp)
+#create years old field
+```
+
+
+
+```{r}
+m3_sp <- lm(log(pricesold) ~ Beds + bath + garages + Pool + spa + lppersqft + Roof, data = df)
+summary(m3_sp)
+plot(m3_sp)
+
+hist(m3_sp$residuals)
+hist(m3_sp$fitted.values)
+
+print("Normality - Shapiro Wilks test : ") # since sample less than 2000
+shapiro.test(m3_sp$residuals) 
+print("Bartlett's test : ") 
+bartlett.test(list(m3_sp$residuals,m3_sp$fitted.values))
+print("Durbin-Watson's test : ") 
+lmtest::dwtest(m3_sp)
+car::vif(m3_sp)
+```
+
+Comparing the three models to check our estimates are consistent.
+
+```{r}
+stargazer::stargazer(m1_sp,m2_sp,m3_sp, title="Results", type = "text")
+```
+
+Top 3 predictors of price sold from m2_sp:
+
+* The marginal effect of baths suggests that adding 1 bathroom increases the selling price of the house by 20.44% keeping all other variables constant.
+Private pool	
+* The marginal effect of categorical variable Pool suggests that selling price for houses with private pool will be 9.85% more than houses with access to community pool.
+* The marginal effect of the variable bed suggests that adding 1 bedroom increases the selling price of a house by 9.19% keeping all other variables constant.
