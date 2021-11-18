@@ -7,4 +7,6 @@ This Repo consists of all the assignments I did for the Statistical Data Mining 
 
 * We then create our regression models, perform tests for assumptions and then interpret the results to provide recommendations.
 
+* For the final project, myself along with 2 members in my group did a project on "Factors influencing homicides in the United States" 
+
 
